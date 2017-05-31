@@ -1,0 +1,120 @@
+FSUIPC Developer Kit: Unit and Example for Delphi programmers
+------------------------------------------------------------------
+ReadThis.TXT     This File
+FPCuser.PAS      Delphi UNIT that contains functions to interact
+                 with FSUIPC/WideFS
+UIPChello.*      Example application
+MainForm.*       Main form of Example application
+==================================================================
+
+To interface to FSUIPC (versions 1.998e or later) in your Delphi programs:
+
+* Add "FPCuser" to you uses clause and place "FPCuser.PAS" in a folder 
+  accessible to Delphi (within Delphi's search-path).
+* call the appropriate Library routines in your code.
+
+More on this last part (and please also refer to the UIPCHello example
+provided):
+
+Opening the link to FSUIPC
+==========================
+
+For this you use the following Library routine:
+
+  Function FSUIPC_Open(dwFSReq : DWORD; var dwResult : DWORD) : Boolean;
+
+where dwFSReq specified which Flight Simulator you want to connect to:
+	
+  SIM_ANY	for any supported by FSUIPC or equivalent	
+  SIM_FS98	FS98
+  SIM_FS2K	FS2000
+  SIM_FS2K2	FS2002
+  SIM_CFS2	CFS2
+  SIM_CFS1	CFS
+  SIM_FLY	Fly! (not supported yet, and no promises implied!)
+
+and
+  dwResult is the DWORD to receive an error number if the operation fails.
+	
+If FSUIPC_Open returns "FALSE" then the value in the dwResult DWORD will
+tell you what went wrong. The errors currently possible are defined in
+"FSPuser.pas" (see the list of FSUIPC_ERR_ ... definitions).
+
+If it returns "TRUE" then the link is now opened  and ready for your requests. 
+Already the Library routine will have obtained some data for you:
+
+  FSUIPC_Version : DWORD;	  // HIWORD is 1000 x Version Number, minimum 1998
+				  // LOWORD is build letter, with a = 1 etc.
+  FSUIPC_FS_Version : DWORD;      // SIM_FS98, SIM_FS2K etc -- see above
+  FSUIPC_Lib_Version : DWORD;     // Version of the "library" (Delphi-source)
+
+
+Closing the link
+================
+
+Before terminating your program, or trying to re-open (e.g. to re-connect
+after a lost connection, possibly due to FS crashing or closing), you must
+Close the link to free up the resources it uses:
+
+  Procedure FSUIPC_Close;
+	
+There is no harm done if you Close a link that is already Closed.
+
+
+
+Specifying the requests
+=======================
+
+The interface to FSUIPC and hence the simulator is simply one of reads and
+writes from and to specific "offsets". These "were originally true offsets
+into a specific Global data earea within FS, but nowadays, at least in FS2000
+and CFS they are more likely to be treated a Identifiers to specific
+variables, and are translated within FSUIPC. However, you may still address
+data with contiguous offsets in blocks, as FSUIPC breaks these down if it
+needs to.
+
+The following Library calls are used to accumulate Read and Write requests:
+
+  Function FSUIPC_Read(dwOffset : DWORD; dwSize : DWORD; 
+                       pDest : Pointer; var dwResult : DWORD) : Boolean;
+  Function FSUIPC_Write(dwOffset : DWORD; dwSize : DWORD;
+                        pSrce : Pointer; var dwResult : DWORD) : Boolean;
+											
+In both cases you supply an offset, identifying the data required or to be
+written, and a size (in bytes). The pointers "pDest" for reads and "pSrce"
+for writes naturally must point to the area to receive the result or (for
+writes) the area containing the data to be written. 
+
+The DWORD for the dwResult is used to identify the reason for error should the
+return be FALSE. The only possible errors on these calls are an unopened
+link or a full data area. You can only accumulate so much data before you need
+to get FSUIPC to "process" it. This is next:
+
+
+Processing the requests
+=======================
+
+  Funciton FSUIPC_Process(DWORD *pdwResult) : Boolean;
+	
+This routine sends all the requests accumulated using the Read and Write calls
+since the last Process call (if any). It is this call which actually operates
+the interface.
+
+As usual , the error number in the dwResult DWORD needs to be checked if this
+call returns FALSE, indicating an error.
+
+Note that, if your program is run under WideClient, it is likely that your
+first requests for data are met with zeroes for everything. this is because
+WideClient sends off the request but meanwhile returns what it already has. If
+you depend on seeing correct data from the outset, you will need to wait some
+milliseocnds (100 or more is good, 500 safer) and read again.
+
+If you are coninually reading the same data over and over in a loop, as when,
+for instance, maintaining a moving map position and so on, the initial values
+from Wideclient shouldn't be any bother. But remember, in loops, allow some
+time for other processes to run, and also process your own Windows messages.
+
+==============================================================================
+Pelle F. S. Liljendal (pelle@liljendal.dk), 7th December 2000
+*** This file is based on Peter Dowson's original file ***
+

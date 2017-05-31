@@ -1,0 +1,36 @@
+object FormMain: TFormMain
+  Left = 408
+  Top = 673
+  HorzScrollBar.Visible = False
+  Anchors = []
+  BorderIcons = []
+  BorderStyle = bsDialog
+  Caption = 'Virtuaflight - Lite'
+  ClientHeight = 332
+  ClientWidth = 862
+  Color = clBtnFace
+  Font.Charset = DEFAULT_CHARSET
+  Font.Color = clWindowText
+  Font.Height = -11
+  Font.Name = 'MS Sans Serif'
+  Font.Style = []
+  OldCreateOrder = True
+  Position = poDesktopCenter
+  Scaled = False
+  Visible = True
+  OnClose = FormClose
+  OnCreate = FormCreate
+  PixelsPerInch = 96
+  TextHeight = 13
+  object LocalTime: TTimer
+    Enabled = False
+    Interval = 500
+    OnTimer = LocalTimeTimer
+    Left = 456
+  end
+  object SimuTimer: TTimer
+    Interval = 2000
+    OnTimer = SimuTimerTimer
+    Left = 512
+  end
+end

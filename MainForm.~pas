@@ -1,0 +1,514 @@
+//   Copyright © 2000 by Pelle F. S. Liljendal               pelle@liljendal.dk
+//   All Rights Reserved
+//
+//   MainForm.pas
+//
+//   Example-program demostrating how to use FPCuser.pas (based on C-source
+//   by Peter Dowson)
+//
+//   (Modified by Chris Brett to add support for FS2002 UIPC compatibility.)
+//   (chris@formulate.clara.net)
+//
+//-----------------------------------------------------------------------------
+unit MainForm;
+
+interface
+
+uses
+  Windows, Messages, SysUtils, Classes, Controls, Forms, StdCtrls, ExtCtrls, Math,
+  Dialogs, Graphics, ColorGrd, stdActns, FileCtrl, FPCuser, Menus,
+  WinSkinData;
+
+
+Const
+  ResultText : Array[0..15] of String = ('Okay',
+                                        'Attempt to Open when already Open',
+                                        'Cannot link to FSUIPC or WideClient',
+                                        'Failed to Register common message with Windows',
+                                        'Failed to create Atom for mapping filename',
+                                        'Failed to create a file mapping object',
+                                        'Failed to open a view to the file map',
+                                        'Incorrect version of FSUIPC, or not FSUIPC',
+                                        'Sim is not version requested',
+                                        'Call cannot execute, link not Open',
+                                        'Call cannot execute: no requests accumulated',
+                                        'IPC timed out all retries',
+                                        'IPC sendmessage failed all retries',
+                                        'IPC request contains bad data',
+                                        'Maybe running on WideClient, but FS not running on Server, or wrong FSUIPC',
+                                        'Read or Write request cannot be added, memory for Process is full');
+  SimulationText : Array[0..6] of String = ('Any', 'FS98', 'FS2K', 'CFS2', 'CFS1', 'FLY', 'FS2002');
+  SELDIRHELP = 1000;
+  SecPerDay = 86400;
+  SecPerHour = 3600;
+  SecPerMinute = 60;
+
+type
+  TFormMain = class(TForm)
+    Label1             : TLabel;
+    LabelSim           : TLabel;
+    Label2             : TLabel;
+    Label3             : TLabel;
+    LabelFSUIPCversion : TLabel;
+    LabelFSclock       : TLabel;
+    ButtonOk           : TButton;
+    LocalTime: TTimer;
+    Label4: TLabel;
+    SimuTimer: TTimer;
+    Label8: TLabel;
+    Label6: TLabel;
+    Label7: TLabel;
+    Label9: TLabel;
+    Label5: TLabel;
+    Label10: TLabel;
+    Label11: TLabel;
+    Label12: TLabel;
+    Label13: TLabel;
+    Label14: TLabel;
+    Label15: TLabel;
+    Label16: TLabel;
+    Label17: TLabel;
+    Label18: TLabel;
+    Label19: TLabel;
+    Label20: TLabel;
+    Label21: TLabel;
+    Label22: TLabel;
+    Label23: TLabel;
+    Label25: TLabel;
+    Label24: TLabel;
+    Label26: TLabel;
+    Label27: TLabel;
+    Timer1: TTimer;
+    Button1: TButton;
+    Label28: TLabel;
+    OpenDialog1: TOpenDialog;
+    Label30: TLabel;
+    Label31: TLabel;
+    Label32: TLabel;
+    Label33: TLabel;
+    Bevel1: TBevel;
+    ComboBox1: TComboBox;
+    Label29: TLabel;
+    SkinData1: TSkinData;
+
+    procedure FormCreate(Sender: TObject);
+    procedure FormClose(Sender: TObject; var Action: TCloseAction);
+    procedure ButtonOkClick(Sender: TObject);
+    procedure LocalTimeTimer(Sender: TObject);
+    procedure SimuTimerTimer(Sender: TObject);
+    procedure GForceTimer(Sender: TObject);
+    procedure Button1Click(Sender: TObject);
+    procedure ComboBox1Select(Sender: TObject);
+    procedure ComboBox1Change(Sender: TObject);
+
+
+
+
+  private
+    { Private declarations }
+  public
+    { Public declarations }
+  end;
+
+var
+  FormMain: TFormMain;
+
+
+
+
+implementation
+
+{$R *.DFM}
+
+
+
+procedure TFormMain.Button1Click(Sender: TObject);
+var
+sDir :String;
+begin
+sDir := 'C:\';
+ if FileCtrl.SelectDirectory(sDir, [sdAllowCreate, sdPerformCreate, sdPrompt],SELDIRHELP) then
+   Label28.Caption:= sDir;
+end;
+
+procedure TFormMain.FormCreate(Sender: TObject);
+var
+  dwResult : DWORD;
+begin
+
+// Initialisation COmbobox
+
+// ComboBox1.Items.BeginUpdate;
+// ComboBox1.Items.Clear;
+// ComboBox1.Items.Add('Alpha');
+// ComboBox1.Items.Add('Beta');
+// ComboBox1.Items.Add('Gamma');
+// ComboBox1.Items.Add('Delta');
+// ComboBox1.Items.EndUpdate;
+
+
+// Initialisation du label du répertoire d'enregistrement du fichier
+    Label28.Caption := 'C:\';
+
+  // Try to connect to FSUIPC (or WideFS)
+  if FSUIPC_Open(SIM_ANY, dwResult) then begin
+    // Connected to simulator (visible in the form's caption)
+    FormMain.Caption           := FormMain.Caption + ResultText[dwResult];
+    // Show what simulator we are connected to
+    LabelSim.Caption           := SimulationText[FSUIPC_FS_Version];
+    // Show version of FSUIPC
+    LabelFSUIPCversion.Caption := Char(Ord('0') + ($0F and (FSUIPC_Version SHR 28))) +
+                                  '.' +
+                                  Char(Ord('0') + ($0F and (FSUIPC_Version SHR 24))) +
+                                  Char(Ord('0') + ($0F and (FSUIPC_Version SHR 20))) +
+                                  Char(Ord('0') + ($0F and (FSUIPC_Version SHR 16)));
+    if (FSUIPC_Version and $FFFF) <> 0 then begin
+      LabelFSUIPCversion.Caption := LabelFSUIPCversion.Caption  +
+                                    Char(Ord('a') + (FSUIPC_Version and $FF) - 1);
+    end;
+    // Enable the timer which is actually reading the time
+    LocalTime.Enabled := True;
+  end else begin
+    // Unable to "Connect"
+    FormMain.Caption := FormMain.Caption + ResultText[dwResult];
+  end;
+end;
+
+
+procedure TFormMain.FormClose(Sender: TObject; var Action: TCloseAction);
+begin
+  // Disconnect from FSUIPC/WideS (and dispose used "objects")
+  FSUIPC_Close;
+end;
+
+
+procedure TFormMain.ButtonOkClick(Sender: TObject);
+begin
+  // Close the (Delphi) MainForm, hence end the application
+  Close;
+end;
+
+
+function SecondToTime(const Seconds: Cardinal): Double;
+var
+  ms, ss, mm, hh, dd: Cardinal;
+begin
+  dd := Seconds div SecPerDay;
+  hh := (Seconds mod SecPerDay) div SecPerHour;
+  mm := ((Seconds mod SecPerDay) mod SecPerHour) div SecPerMinute;
+  ss := ((Seconds mod SecPerDay) mod SecPerHour) mod SecPerMinute;
+  ms := 0;
+  Result := dd + EncodeTime(hh, mm, ss, ms);
+end;
+
+
+procedure TFormMain.LocalTimeTimer(Sender: TObject);
+var
+  dwResult : DWORD;
+  auiTime: Array [1..3] of Byte;
+  IAS  : dword;
+  TimeElapsed : Double;
+  Seconds : real;
+  i:dword;
+begin
+  // As an example of retrieving data, well also get the FS clock time too:
+  // If we wanted additional reads/writes at the same time, we could put them here
+  if FSUIPC_Read($0238, 3, @auiTime, dwResult) and FSUIPC_Read($04A8, 8, @TimeElapsed, dwResult)
+  then begin
+    // "Reed" proceeded without any problems
+    if FSUIPC_Process(dwResult) then begin
+      // "Process" proceeded withou any problems
+      LabelFSclock.Caption := Format('%.2d:%.2d:%.2d', [auiTime[1], auiTime[2], auiTime[3]]);
+     i:=round(TimeElapsed);
+     Label31.Caption:= TimeToStr(SecondToTime(i));
+
+    end;
+  end;
+end;                                         
+
+procedure TFormMain.SimuTimerTimer(Sender: TObject);
+var
+  dwResult,IAS : DWORD;
+  FS : WORD;
+  MACH: dword;
+HDG, RA : cardinal;
+BANK,VSTouch : Integer;
+VS : smallint;
+Frame_Rate,AOG : word;
+RadioAltSource, vsoutput, GForce: Double;
+ALT : int64;
+AltitudeSource,BankAngleOutput,HeadingOutput : extended;
+SpeedIASText, SpeedMachText,HeadingText,BankAngleText,
+VerticalSpeedText, FrameRateText,AltOutputText : TStringlist;
+  sDir :String;
+
+const
+  div1 = 360 / 4294967296;
+  div2 = 3.28084 / 4294967296;
+  div3 = 3.28084 / 65536;
+  div4 = 60*3.28084/256;
+
+
+  ///-------------------IAS and MACH----------------------
+begin
+
+  SpeedMachText := TStringlist.create;
+  SpeedIASText := TStringlist.create;
+  if FSUIPC_Read($02bc, 4, @IAS, dwResult) and
+  FSUIPC_Read($011c6, 4, @MACH, dwResult) then begin
+    // "Reed" proceeded without any problems
+    if FSUIPC_Process(dwResult) then begin      // lecture
+      // "Process" proceeded withou any problems
+      Label4.Caption := FormatFloat('0',IAS/128) + ' kts';
+      Label5.Caption:= FormatFloat('0.00',MACH/20480);
+   try
+// Ajout des données de vol MACH dans le fichier
+      SpeedMachText.Add(FormatFloat('0.00',MACH/20480));
+//      sDir:= 'c:\';
+      SpeedMachText.SaveToFile(Label28.Caption  + '\mach.txt');
+
+// Ajout des données de vol IAS dans le fichier
+      SpeedIASText.Add(FormatFloat('0',IAS/128) + ' kts');
+      SpeedIASText.SaveToFile(Label28.Caption + '\ias.txt');
+    finally
+    SpeedIASText.Free;
+    SpeedMachText.Free;
+
+      end;
+   end;
+end;
+ ///----------------------------------------------------
+
+
+///-------------------HEADING----------------------------
+    HeadingText := TStringlist.create;
+    if FSUIPC_Read($0580, 4, @HDG, dwResult) then begin
+    // "Reed" proceeded without any problems         *360/(65536*65536)
+    if FSUIPC_Process(dwResult) then begin
+      // "Process" proceeded withou any problems
+      HeadingOutput := HDG * div1;
+     Label13.Caption := FormatFloat('0',HeadingOutput)+ ' deg.';
+       try
+         HeadingText.Add(FormatFloat('0',HeadingOutput)+ '°');
+         HeadingText.SaveToFile(Label28.Caption  + '\heading.txt');
+          finally
+    HeadingText.Free;
+    end;
+     end;
+  end;
+ ///----------------------------------------------------
+  ///-------------------BANK----------------------------
+    BankAngleText := TStringlist.create;
+    if FSUIPC_Read($057C, 4, @BANK, dwResult) then begin
+    // "Reed" proceeded without any problems   *360/(65536*65536)
+    if FSUIPC_Process(dwResult) then begin
+      // "Process" proceeded withou any problems
+     BankAngleOutput := BANK * div1;
+     Label15.Caption := FormatFloat('0',BankAngleOutput)+ ' deg.';
+            try
+         BankAngleText.Add(FormatFloat('0',BankAngleOutput)+ '°');
+         BankAngleText.SaveToFile(Label28.Caption  + '\BankAngle.txt');
+          finally
+    BankAngleText.Free;
+    end;
+     end;
+  end;
+ ///----------------------------------------------------
+
+
+ ///-------------------VERTICAL SPEED--------------------
+    VerticalSpeedText := TStringlist.create;
+    if FSUIPC_Read($0842, 2, @VS, dwResult) then begin
+    // "Reed" proceeded without any problems
+    if FSUIPC_Process(dwResult) then begin
+      // "Process" proceeded withou any problems
+      Label7.Caption := FormatFloat('0',VS*-3.28084) + ' ft/min';
+      try
+         VerticalSpeedText.Add(FormatFloat('0',VS*-3.28084) + ' ft/min');
+         VerticalSpeedText.SaveToFile(Label28.Caption  + '\VertSpeed.txt');
+          finally
+    VerticalSpeedText.Free;
+    end;
+     end;
+  end;
+ ///----------------------------------------------------
+
+
+
+ ///-------------------FRAME RATE------------------------
+    FrameRateText := TStringlist.create;
+    if FSUIPC_Read($0274, 2, @Frame_Rate, dwResult) then begin
+    // "Reed" proceeded without any problems
+    if FSUIPC_Process(dwResult) then begin
+      // "Process" proceeded withou any problems
+      Label11.Caption := FormatFloat('0',32768/Frame_Rate) + ' fps';
+      try
+         FrameRateText.Add(FormatFloat('0',32768/Frame_Rate) + ' fps');
+         FrameRateText.SaveToFile(Label28.Caption  + '\fps.txt');
+          finally
+    FrameRateText.Free;
+    end;
+     end;
+  end;
+ ///----------------------------------------------------
+
+
+   ///-------------------ALTITUDE------------------------
+   AltOutputText := TStringlist.create;
+    if FSUIPC_Read($0570, 8, @ALT, dwResult) then begin
+    // "Reed" proceeded without any problems    #*3.28084/(65536*65536) = 4294967296
+    if FSUIPC_Process(dwResult) then begin
+      // "Process" proceeded withou any problems
+    AltitudeSource := ALT * div2;
+    Label17.Caption := FormatFloat('0',AltitudeSource) + ' ft';
+    try
+         AltOutputText.Add(FormatFloat('0',AltitudeSource) + ' ft');
+         AltOutputText.SaveToFile(Label28.Caption  + '\altitude.txt');
+          finally
+    AltOutputText.Free;
+    end;
+     end;
+  end;
+ ///----------------------------------------------------
+
+
+ ///-------------------Radio Altitude----------------
+    if FSUIPC_Read($31E4, 4, @RA, dwResult) then begin
+    // "Reed" proceeded without any problems
+    if FSUIPC_Process(dwResult) then begin
+      // "Process" proceeded withou any problems
+
+       RadioAltSource :=  RA*div3;
+       if RadioAltSource < 500 then
+       Label21.Caption := FormatFloat('0',RadioAltSource) + ' ft'
+       else
+       Label21.Caption := 'Not Avail';
+       Label23.Caption :=  '0 ft/s';
+     end;
+  end;
+ ///----------------------------------------------------
+
+
+///-------------------VS at Touchdown----------------
+    if FSUIPC_Read($030C, 4, @VSTouch, dwResult) then begin
+    // "Reed" proceeded without any problems  #*60*3.28084/256
+    if FSUIPC_Process(dwResult) then begin
+      // "Process" proceeded withou any problems
+      vsoutput := VSTouch*div4;
+     end;
+  end;
+ ///----------------------------------------------------
+
+ ///-------------------Aircraft On Ground----------------
+  if FSUIPC_Read($0366, 2, @AOG, dwResult) then begin
+    // "Reed" proceeded without any problems  0=Airborne, 1=On Ground
+    if FSUIPC_Process(dwResult) then begin
+      // "Process" proceeded withou any problems
+
+//     a:=format('mon chiffre est : %8.1d', [IAS]);
+if AOG = 1 then // On Ground
+      begin
+      Label25.Caption := 'ON GROUND';
+      Label25.Font.Color := clGreen;
+      Label23.Caption := FormatFloat('0',vsoutput) + ' ft/min';
+      end
+      else   // On Flight
+      begin
+      Label25.Caption := 'AIRBORNE';
+      Label25.Font.Color := clRed;
+      end
+    end;
+
+
+  end;
+  ///----------------------------------------------------
+
+
+   ///-------------------FS Version----------------
+  if FSUIPC_Read($3308, 2, @FS, dwResult) then begin
+    // "Reed" proceeded without any problems  0=Airborne, 1=On Ground
+    if FSUIPC_Process(dwResult) then begin
+       if FS = 10 then
+                Label27.Caption := 'Prepar 3D'
+                else
+      Label27.Caption := 'other than P3D';
+    end;
+  end;
+
+  ///----------------------------------------------------
+
+  end;
+
+
+
+procedure TFormMain.GForceTimer(Sender: TObject);
+var
+  dwResult : DWORD;
+GForce: Double;
+GForceText : TStringlist;
+
+const
+  div1 = 360 / 4294967296;
+  div2 = 3.28084 / 4294967296;
+  div3 = 3.28084 / 65536;
+  div4 = 60*3.28084/256;
+begin
+
+///-------------------G-FORCE------------------------
+
+ GForceText := TStringlist.create;
+   if FSUIPC_Read($1140, 8, @GForce, dwResult) then begin
+    // "Reed" proceeded without any problems
+   if FSUIPC_Process(dwResult) then begin
+      // "Process" proceeded withou any problems
+        Label19.Caption := FormatFloat('0.00',GForce) + ' G';
+ try
+         GForceText.Add(FormatFloat('0.00',GForce) + ' G');
+         GForceText.SaveToFile(Label28.Caption  + '\fps.txt');
+          finally
+    GForceText.Free;
+    end;
+   end;
+  end;
+ ///----------------------------------------------------
+end;
+
+
+
+
+procedure TFormMain.ComboBox1Select(Sender: TObject);
+begin
+ label29.Caption := ComboBox1.Text;
+end;
+
+procedure TFormMain.ComboBox1Change(Sender: TObject);
+var
+ SelectedItem: string;
+begin
+SelectedItem := '';
+           if combobox1.Itemindex <> -1 then
+    SelectedItem := ComboBox1.Items[ComboBox1.ItemIndex];
+    if SelectedItem = '1000 ms' then
+           begin
+           label29.Caption := '1000 ms';
+           formMain.Color := clyellow;
+           Timer1.Interval := 100;
+          end
+        else if SelectedItem = '2000 ms' then
+           begin
+           label29.Caption := '2000 ms';
+            formMain.Color := clblue;
+           Timer1.Interval := 2000;
+           end
+end;
+
+
+
+
+
+
+
+
+
+end.
+
